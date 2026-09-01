@@ -13,19 +13,35 @@ logger = logging.getLogger("ragapp")
 
 
 class OpenAIClient(BaseModel):
-    """
-    OpenAI client
-    """
+    """Contenedor tipado para un cliente OpenAI.
 
+    Se usa como dependencia de FastAPI para inyectar el cliente
+    de chat o de embeddings en los endpoints.
+
+    Raises en construcción:
+        Ninguno. El cliente se entrega ya sea configurado o no;
+        la validación ocurre al primer uso (lazy validation).
+    """
     client: AsyncOpenAI
     model_config = {"arbitrary_types_allowed": True}
 
 
 class FastAPIAppContext(BaseModel):
-    """
-    Context for the FastAPI app
-    """
+    """Contexto compartido de la aplicación FastAPI.
 
+    Este modelo se construye una vez por request y contiene toda la
+    configuración que necesitan los servicios RAG: modelo de chat,
+    modelo de embeddings, deployments, y columna de embedding activa.
+
+    Tipos de campos:
+        openai_chat_model: Nombre del modelo para chat (ej: gpt-4o-mini).
+        openai_embed_model: Nombre del modelo para embeddings.
+        openai_embed_dimensions: Dimensiones del vector de embedding
+                                (None si el modelo no soporta dimensions).
+        openai_chat_deployment: Deployment Azure (None si no es Azure).
+        openai_embed_deployment: Deployment Azure (None si no es Azure).
+        embedding_column: Nombre de la columna vectorial (embedding_3l o embedding_nomic).
+    """
     openai_chat_model: str
     openai_embed_model: str
     openai_embed_dimensions: Optional[int]
@@ -36,8 +52,34 @@ class FastAPIAppContext(BaseModel):
 
 async def common_parameters():
     """
-    Get the common parameters for the FastAPI app
-    Use the pattern of `os.getenv("VAR_NAME") or "default_value"` to avoid empty string values
+    Lee y estructura la configuración desde variables de entorno.
+
+    Usa el patrón: `os.getenv("VAR_NAME") or "default_value"`
+    para evitar valores vacíos (cadenas vacías).
+
+    Configuración por proveedor de embeddings:
+
+    **Azure OpenAI** (OPENAI_EMBED_HOST == "azure"):
+        - AZURE_OPENAI_EMBED_DEPLOYMENT -> deployment (default: text-embedding-3-large)
+        - AZURE_OPENAI_EMBED_MODEL -> modelo (default: text-embedding-3-large)
+        - AZURE_OPENAI_EMBED_DIMENSIONS -> dimensiones (default: 1024)
+        - AZURE_OPENAI_EMBEDDING_COLUMN -> columna vectorial (default: embedding_3l)
+
+    **Ollama** (OPENAI_EMBED_HOST == "ollama"):
+        - OLLAMA_EMBED_MODEL -> modelo (default: nomic-embed-text)
+        - OLLAMA_EMBEDDING_COLUMN -> columna vectorial (default: embedding_nomic)
+
+    **OpenAI.com** (por defecto):
+        - OPENAICOM_EMBED_MODEL -> modelo (default: text-embedding-3-large)
+        - OPENAICOM_EMBED_DIMENSIONS -> dimensiones (default: 1024)
+        - OPENAICOM_EMBEDDING_COLUMN -> columna vectorial (default: embedding_3l)
+
+    Returns:
+        FastAPIAppContext con toda la configuración parseada.
+
+    Nota:
+        Esta función NO verifica que los deployments existan realmente.
+        Esa validación ocurre al primer intento de uso de la API.
     """
     OPENAI_EMBED_HOST = os.getenv("OPENAI_EMBED_HOST")
     OPENAI_CHAT_HOST = os.getenv("OPENAI_CHAT_HOST")
@@ -79,6 +121,20 @@ async def common_parameters():
 async def get_azure_credential() -> (
     azure.identity.aio.AzureDeveloperCliCredential | azure.identity.aio.ManagedIdentityCredential
 ):
+    """
+    Obtiene una credencial de Azure AD para autenticación.
+
+    Orden de preferencia:
+    1. **Managed Identity** (usuario asignado): si APP_IDENTITY_ID está configurado.
+    2. **Azure Developer CLI**: si AZURE_TENANT_ID está configurado, usa ese tenant.
+    3. **Azure Developer CLI** sin tenant específico.
+
+    Returns:
+        Credencial Azure AD lista para usar (AzureDeveloperCliCredential o ManagedIdentityCredential).
+
+    Raises:
+        Exception: Si no se puede obtener la credencial (error de autenticación).
+    """
     azure_credential: azure.identity.aio.AzureDeveloperCliCredential | azure.identity.aio.ManagedIdentityCredential
     try:
         if client_id := os.getenv("APP_IDENTITY_ID"):
@@ -103,7 +159,20 @@ async def get_azure_credential() -> (
 
 
 async def create_async_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
-    """Get the agent database"""
+    """
+    Crea un sessionmaker asíncrono para SQLAlchemy.
+
+    Args:
+        engine: AsyncEngine de SQLAlchemy ya configurado.
+
+    Returns:
+        async_sessionmaker con expire_on_commit=False y autoflush=False.
+
+    Nota:
+        expire_on_commit=False evita que SQLAlchemy invalide los objetos
+        después del commit, permitiendo acceder a atributos fuera de la sesión.
+        autoflush=False evita flushes automáticos inesperados.
+    """
     return async_sessionmaker(
         engine,
         expire_on_commit=False,
