@@ -33,7 +33,11 @@ class FastAPIAppContext(BaseModel):
     configuración que necesitan los servicios RAG: modelo de chat,
     modelo de embeddings, deployments, y columna de embedding activa.
 
-    Tipos de campos:
+    Incluye configuración para ambos RAG:
+    - RAG Productos (prefijo AZURE_OPENAI_*, OPENAI_*)
+    - RAG Institucional (prefijo RAG_*)
+
+    Tipos de campos (RAG Productos):
         openai_chat_host: Host backend para chat (azure, foundry, openai, ollama).
         openai_embed_host: Host backend para embeddings.
         openai_chat_model: Nombre del modelo para chat.
@@ -47,7 +51,17 @@ class FastAPIAppContext(BaseModel):
         foundry_embedding_deployment: Deployment Foundry para embeddings (None si no aplica).
         foundry_embedding_dimensions: Dimensiones Foundry (None si no aplica).
         embedding_column: Nombre de la columna vectorial (embedding_3l o embedding_nomic).
+
+    Tipos de campos (RAG Institucional):
+        rag_chat_host: Host backend para chat institucional.
+        rag_embed_host: Host backend para embeddings institucional.
+        rag_llm_model: Modelo LLM institucional.
+        rag_llm_deployment: Deployment LLM institucional.
+        rag_embed_model: Modelo de embeddings institucional.
+        rag_embed_deployment: Deployment de embeddings institucional.
+        rag_embed_dimensions: Dimensiones del embedding institucional.
     """
+    # ── RAG Productos ──
     openai_chat_host: str = "azure"
     openai_embed_host: str = "azure"
     openai_chat_model: str = "gpt-4o-mini"
@@ -60,6 +74,22 @@ class FastAPIAppContext(BaseModel):
     foundry_embedding_deployment: Optional[str] = None
     foundry_embedding_dimensions: Optional[int] = None
     embedding_column: str = "embedding_3l"
+
+    # ── RAG Institucional ──
+    rag_chat_host: str = "foundry"
+    """Host backend para chat institucional (foundry, azure, openai, ollama)."""
+    rag_embed_host: str = "foundry"
+    """Host backend para embeddings institucional."""
+    rag_llm_model: str = "gpt-5.6-luna"
+    """Modelo LLM institucional."""
+    rag_llm_deployment: Optional[str] = "ur-rag-gpt-5-6-luna"
+    """Deployment LLM en Azure/Foundry."""
+    rag_embed_model: str = "text-embedding-3-small"
+    """Modelo de embeddings institucional."""
+    rag_embed_deployment: Optional[str] = "ur-rag-embedding-3-small"
+    """Deployment de embeddings en Azure/Foundry."""
+    rag_embed_dimensions: int = 1536
+    """Dimensiones del embedding institucional (text-embedding-3-small = 1536)."""
 
 
 async def common_parameters():
@@ -144,6 +174,18 @@ async def common_parameters():
     else:
         openai_chat_deployment = None
         openai_chat_model = os.getenv("OPENAICOM_CHAT_MODEL") or "gpt-3.5-turbo"
+    # ── RAG Institucional ──
+    rag_embed_host = os.getenv("RAG_EMBED_HOST", "foundry")
+    rag_chat_host = os.getenv("RAG_CHAT_HOST", "foundry")
+    rag_llm_model = os.getenv("RAG_LLM_MODEL", "gpt-5.6-luna")
+    rag_llm_deployment = os.getenv("RAG_LLM_DEPLOYMENT") or "ur-rag-gpt-5-6-luna"
+    rag_embed_model = os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-small")
+    rag_embed_deployment = os.getenv("RAG_EMBEDDING_DEPLOYMENT") or "ur-rag-embedding-3-small"
+    try:
+        rag_embed_dimensions = int(os.getenv("RAG_EMBEDDING_DIMENSIONS", "1536"))
+    except (TypeError, ValueError):
+        rag_embed_dimensions = 1536
+
     return FastAPIAppContext(
         openai_chat_host=OPENAI_CHAT_HOST or "",
         openai_embed_host=OPENAI_EMBED_HOST or "",
@@ -157,6 +199,13 @@ async def common_parameters():
         foundry_embedding_deployment=foundry_embedding_deployment,
         foundry_embedding_dimensions=foundry_embedding_dimensions,
         embedding_column=embedding_column,
+        rag_chat_host=rag_chat_host,
+        rag_embed_host=rag_embed_host,
+        rag_llm_model=rag_llm_model,
+        rag_llm_deployment=rag_llm_deployment,
+        rag_embed_model=rag_embed_model,
+        rag_embed_deployment=rag_embed_deployment,
+        rag_embed_dimensions=rag_embed_dimensions,
     )
 
 

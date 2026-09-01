@@ -137,10 +137,12 @@ async def create_openai_embed_client(
     azure_credential: azure.identity.aio.AzureDeveloperCliCredential
     | azure.identity.aio.ManagedIdentityCredential
     | None,
+    host_override: Optional[str] = None,
+    deployment_override: Optional[str] = None,
 ) -> openai.AsyncOpenAI:
     openai_embed_client: openai.AsyncOpenAI
-    OPENAI_EMBED_HOST = os.getenv("OPENAI_EMBED_HOST")
-    if OPENAI_EMBED_HOST == "azure":
+    host = host_override if host_override is not None else os.getenv("OPENAI_EMBED_HOST")
+    if host == "azure":
         azure_endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
         azure_deployment = os.environ["AZURE_OPENAI_EMBED_DEPLOYMENT"]
         if api_key := os.getenv("AZURE_OPENAI_KEY"):
@@ -168,14 +170,33 @@ async def create_openai_embed_client(
             )
         else:
             raise ValueError("Azure OpenAI client requires either an API key or Azure Identity credential.")
-    elif OPENAI_EMBED_HOST == "foundry":
-        openai_embed_client = _crear_cliente_openai_foundry(
-            azure_credential,
-            endpoint_var="FOUNDRY_OPENAI_ENDPOINT",
-            deploy_var="FOUNDRY_EMBEDDING_DEPLOYMENT",
-            servicio="embeddings",
+    elif host == "foundry":
+        deploy_name = deployment_override if deployment_override is not None else \
+            os.environ.get("FOUNDRY_EMBEDDING_DEPLOYMENT", "unknown")
+        logger.info(
+            "Setting up Foundry client for embeddings, deployment %s",
+            deploy_name,
         )
-    elif OPENAI_EMBED_HOST == "ollama":
+        endpoint = os.environ["FOUNDRY_OPENAI_ENDPOINT"]
+        if api_key := os.getenv("AZURE_OPENAI_KEY"):
+            openai_embed_client = openai.AsyncOpenAI(
+                base_url=f"{endpoint.rstrip('/')}/openai/v1/",
+                api_key=api_key,
+            )
+        elif azure_credential:
+            token_provider = azure.identity.aio.get_bearer_token_provider(
+                azure_credential, SCOPE_AZURE_COGNITIVE
+            )
+            openai_embed_client = openai.AsyncOpenAI(
+                base_url=f"{endpoint.rstrip('/')}/openai/v1/",
+                api_key=token_provider,
+            )
+        else:
+            raise ValueError(
+                "Foundry client for embeddings requires either an API key "
+                "or Azure Identity credential."
+            )
+    elif host == "ollama":
         logger.info("Setting up OpenAI client for embeddings using Ollama")
         openai_embed_client = openai.AsyncOpenAI(
             base_url=os.getenv("OLLAMA_ENDPOINT"),
