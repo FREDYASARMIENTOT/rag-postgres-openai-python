@@ -21,7 +21,7 @@ async-timeout==5.0.1
     # via
     #   aiohttp
     #   asyncpg
-asyncpg==0.30.0
+asyncpg==0.31.0
     # via fastapi-app (pyproject.toml)
 attrs==25.3.0
     # via
