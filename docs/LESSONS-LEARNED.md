@@ -395,7 +395,7 @@ Un proyecto complejo requiere separar fases claramente.
 | 10 | Validar región y dependencias | ✅ Mapa de regiones hecho |
 | 11 | Aprobación para cambios irreversibles | ✅ Protocolo establecido |
 | 12 | Documentar dependencias | ✅ Cadena mapeada |
-| 13 | Matriz de decisión explícita | ✅ AUDIT-FASE1-MATRIZ.md |
+| 13 | Matriz de decisión explícita | ✅ analysis/AUDIT-FASE1-MATRIZ.md |
 | 14 | Plan de fases clara | ✅ FASE 1-5 definidas |
 ---
 
