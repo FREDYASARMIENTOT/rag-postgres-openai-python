@@ -26,12 +26,13 @@ MODELOS_EMBEDDING_CON_DIMENSIONES_CONFIGURABLES = frozenset({
 })
 """Conjunto de modelos que aceptan el parámetro `dimensions` en la API de embeddings."""
 
-# Requisito pendiente (Fase 3):
-#   - Verificar si gpt-4o-mini (deployment: sii-supervisor-gpt-4o-mini)
-#     en Modelo-IA-UR soporta el endpoint /embeddings.
-#   - Si no soporta, desplegar text-embedding-3-large en Modelo-IA-UR
-#     o crear recurso Azure OpenAI dedicado.
-#   - Pendiente de autorización.
+# Decisión de embedding (Fase Foundry, align con script deployment):
+#   - Modelo seleccionado: text-embedding-3-large
+#   - Deployment creado: ur-rag-embedding-3-large (por deploy-foundry-rag-institucional.ps1)
+#   - Dimensiones: 1024 (configurable vía FOUNDRY_EMBEDDING_DIMENSIONS o AZURE_OPENAI_EMBED_DIMENSIONS)
+#   - Alternativa: text-embedding-3-small (1536d, menor costo)
+#   - Ver docs/decisiones/DECISION-EMBEDDINGS.md para detalles
+#   - Referencia: docs/decisiones/DECISION-EMBEDDINGS.md
 
 
 async def compute_text_embedding(

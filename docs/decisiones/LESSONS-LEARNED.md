@@ -434,7 +434,7 @@ No existía un documento centralizado de arquitectura. La información estaba
 distribuida en múltiples archivos de código y documentación.
 
 **Solución implementada (Fase 3.2):**
-Creación de `docs/ARCHITECTURA-RAG.md` con:
+Creación de `docs/arquitectura/ARCHITECTURA-RAG.md` con:
 - Componentes y sus responsabilidades.
 - Flujo de datos request-response.
 - Seguridad (SQL, autenticación, secretos).

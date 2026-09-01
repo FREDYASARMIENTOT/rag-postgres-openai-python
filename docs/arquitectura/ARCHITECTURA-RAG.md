@@ -1,9 +1,9 @@
 # Arquitectura del RAG Institucional — Universidad del Rosario
 
 **Documento:** ARCHITECTURA-RAG.md  
-**Versión:** 1.0 — Fase 3 (Refactorización)  
+**Versión:** 2.0 — Fase Foundry (Integración Foundry + Desacoplamiento)  
 **Fecha:** 2026-01-09  
-**Status:** ✅ ACTUALIZADO — Refleja el estado real post-refactorización
+**Status:** ✅ ACTUALIZADO — Foundry + Contratos de Proveedor
 
 ---
 
@@ -50,12 +50,23 @@ por request HTTP y se inyecta via dependencias de FastAPI.
 
 | Campo | Descripción | Ejemplo |
 |-------|-------------|---------|
-| openai_chat_model | Modelo para chat | `gpt-4o-mini` |
+| openai_chat_host | Host backend para chat | `foundry`, `azure`, `openai` |
+| openai_embed_host | Host backend para embeddings | `foundry`, `azure`, `openai` |
+| openai_chat_model | Modelo para chat | `gpt-5.6-luna` |
 | openai_embed_model | Modelo para embeddings | `text-embedding-3-large` |
 | openai_embed_dimensions | Dimensiones del vector | `1024` |
-| openai_chat_deployment | Deployment Azure | `sii-supervisor-gpt-4o-mini` |
-| openai_embed_deployment | Deployment Azure (si existe) | PENDIENTE |
+| openai_chat_deployment | Deployment Azure/Foundry | `ur-rag-gpt-5-6-luna` |
+| openai_embed_deployment | Deployment Foundry | `ur-rag-embedding-3-large` |
 | embedding_column | Columna vectorial activa | `embedding_3l` |
+
+### 2.1b Proveedores (`proveedores.py`)
+
+Contratos abstractos que desacoplan la lógica de negocio de modelos concretos:
+
+- **ProveedorLLM**: Contrato para clientes de chat. Propiedades: `cliente`, `modelo`, `deployment`.
+- **ProveedorEmbeddings**: Contrato para clientes de embeddings. Propiedades: `cliente`, `modelo`, `deployment`, `dimensiones`.
+
+Las implementaciones concretas (`ProveedorLLMBase`, `ProveedorEmbeddingsBase`) reciben el cliente y configuración ya resueltos desde `openai_clients.py`. La lógica de negocio NUNCA contiene nombres de modelos hardcodeados.
 
 ### 2.2 Embeddings (`embeddings.py`)
 
@@ -194,14 +205,16 @@ Crea y gestiona el engine asíncrono SQLAlchemy.
 
 | Deployment | Modelo | Estado |
 |------------|--------|--------|
-| `sii-supervisor-gpt-4o-mini` | `gpt-4o-mini` | ✅ CONFIRMADO |
-| `text-embedding-3-large` | `text-embedding-3-large` | ⏳ PENDIENTE |
+| `ur-rag-gpt-5-6-luna` | `gpt-5.6-luna` | ✅ CREADO por `deploy-foundry-rag-institucional.ps1` |
+| `sii-supervisor-gpt-4o-mini` | `gpt-4o-mini` | 🔄 LEGACY (Azure OpenAI) — PROTEGIDO |
+| `ur-rag-embedding-3-large` | `text-embedding-3-large` | ✅ CREADO por `deploy-foundry-rag-institucional.ps1` |
 
-### 6.3 Pendientes
+### 6.3 Estado de Implementación
 
-1. Verificar si `gpt-4o-mini` soporta el endpoint `/embeddings`.
-2. Confirmar `AZURE_OPENAI_ENDPOINT` real de Modelo-IA-UR.
-3. Si Modelo-IA-UR no puede alojar embeddings: crear recurso Azure OpenAI dedicado.
+1. ✅ Deployments creados por `deploy-foundry-rag-institucional.ps1`.
+2. ✅ `FOUNDRY_OPENAI_ENDPOINT` confirmado: `https://modelo-ia-ur.cognitiveservices.azure.com/`
+3. ⏳ Validar dimensiones 1024 con benchmark de corpus real (pendiente).
+4. ⏳ Verificar cuota del deployment `ur-rag-gpt-5-6-luna` para el RAG (pendiente).
 
 ---
 
@@ -259,7 +272,9 @@ Agente A   Agente B   Agente C
 - Código fuente: `src/backend/fastapi_app/`
 - Tests: `src/backend/tests/`
 - Infraestructura: `infra/`
-- Lecciones aprendidas: `docs/LESSONS-LEARNED.md`
+- Lecciones aprendidas: `docs/decisiones/LESSONS-LEARNED.md`
+- Decisión de embeddings: `docs/decisiones/DECISION-EMBEDDINGS.md`
+- Integración Foundry: `docs/arquitectura/FOUNDRY-INTEGRATION.md`
 - Skills del proyecto: `.cline/skills/`
 
 ---

@@ -198,18 +198,109 @@ This template uses [Managed Identity](https://learn.microsoft.com/entra/identity
 
 Additionally, we have added a [GitHub Action](https://github.com/microsoft/security-devops-action) that scans the infrastructure-as-code files and generates a report containing any detected issues. To ensure continued best practices in your own repository, we recommend that anyone creating solutions based on our templates ensure that the [Github secret scanning](https://docs.github.com/code-security/secret-scanning/about-secret-scanning) setting is enabled.
 
-## Guidance
+## RAG Institucional — Universidad del Rosario
+
+This fork extends the original project with institutional deployments for the **Universidad del Rosario RAG system**,
+integrating with **Microsoft Foundry (Azure AI Studio)** and existing PostgreSQL infrastructure (`supersetdev`).
+
+### Institutional Deployments (Azure AI Foundry)
+
+Two dedicated deployments were created in the existing `Modelo-IA-UR` (AI Services S0) resource:
+
+| Service | Deployment | Model | Dimensions | Status |
+|---------|-----------|-------|-----------|--------|
+| **LLM (Chat)** | `ur-rag-gpt-5-6-luna` | `gpt-5.6-luna` | — | ✅ Created (Succeeded) |
+| **Embeddings** | `ur-rag-embedding-3-large` | `text-embedding-3-large` | 1024 | ✅ Created (Succeeded) |
+
+### Legacy Protection
+
+The existing deployment `sii-supervisor-gpt-4o-mini` (gpt-4o-mini) is **protected** and has not been modified.
+
+### Quick Start
+
+1. **Copy environment template** (do NOT commit `.env` to Git):
+   ```bash
+   cp .env.sample .env
+   ```
+
+2. **Configure .env** with your environment:
+   - `OPENAI_CHAT_HOST=foundry` (or `azure` / `openai`)
+   - `OPENAI_EMBED_HOST=foundry` (or `azure` / `openai`)
+   - `FOUNDRY_OPENAI_ENDPOINT=https://modelo-ia-ur.cognitiveservices.azure.com`
+   - PostgreSQL connection (see `.env.sample` for details)
+
+3. **Authenticate to Azure**:
+   ```bash
+   azd auth login
+   ```
+
+4. **Run tests**:
+   ```bash
+   python -m pytest src/backend/tests/ -v
+   ```
+   Expected: 57 passed, 2 skipped (Azure integration tests).
+
+5. **Start the application**:
+   ```bash
+   python -m uvicorn fastapi_app:create_app --factory --reload
+   ```
+
+### Deployment Script
+
+The script `deploy-foundry-rag-institucional.ps1` creates the institutional deployments:
+- **Idempotent**: Re-running does not modify existing deployments.
+- **Parameters**: `-ResourceGroupName`, `-LlmTpmCapacity`, `-EmbeddingTpmCapacity`.
+- **Example**:
+  ```powershell
+  pwsh ./deploy-foundry-rag-institucional.ps1 `
+      -ResourceGroupName "RG-Datamining-IA-UR" `
+      -LlmTpmCapacity 250 `
+      -EmbeddingTpmCapacity 250
+  ```
+
+### Architecture
+
+```
+[FastAPI — proveedores.py]
+    │
+    ├── ProveedorLLM ───────────── Foundry (Modelo-IA-UR)
+    │   └── ur-rag-gpt-5-6-luna (gpt-5.6-luna)
+    │
+    └── ProveedorEmbeddings ────── Foundry (Modelo-IA-UR)
+        └── ur-rag-embedding-3-large (text-embedding-3-large, 1024d)
+               │
+               └── PostgreSQL (supersetdev) + pgvector
+```
+
+### Azure Resources
+
+| Resource | Name | Type |
+|----------|------|------|
+| Resource Group | `RG-Datamining-IA-UR` | Azure Resource Group |
+| AI Services | `Modelo-IA-UR` | Cognitive Services (S0) |
+| Foundry Project | `Proyecto-IA-UR` | Azure AI Hub/Project |
+| PostgreSQL | `supersetdev` | PostgreSQL Flexible Server |
+| Subscription | `Sub-Tecnologia-Datamining` | Azure Subscription |
+
+### Documentation
 
 Further documentation is available in the `docs/` folder:
 
-* [Understanding the RAG flow](docs/rag_flow.md)
-* [Customizing the data](docs/customize_data.md)
-* [Deploying with existing resources](docs/deploy_existing.md)
-* [Using Entra auth with PostgreSQL tools](docs/using_entra_auth.md)
-* [Monitoring with Azure Monitor](docs/monitoring.md)
-* [Load testing](docs/loadtesting.md)
-* [Quality evaluation](docs/evaluation.md)
-* [Safety evaluation](docs/safety_evaluation.md)
+* [Decisión de LLM Foundry](docs/decisiones/DECISION-LLM-FOUNDRY.md)
+* [Decisión de Embeddings](docs/decisiones/DECISION-EMBEDDINGS.md)
+* [Integración Foundry](docs/arquitectura/FOUNDRY-INTEGRATION.md)
+* [Diseño Vectorial](docs/arquitectura/DISEÑO-VECTORIAL-RAG.md)
+* [Arquitectura del RAG](docs/arquitectura/ARCHITECTURA-RAG.md)
+* [Guía de generación de embeddings](docs/desarrollo/GENERACION-EMBEDDINGS.md)
+* [Understanding the RAG flow](docs/arquitectura/rag_flow.md)
+* [Customizing the data](docs/desarrollo/customize_data.md)
+* [Deploying with existing resources](docs/operaciones/deploy_existing.md)
+* [Using Entra auth with PostgreSQL tools](docs/seguridad/using_entra_auth.md)
+* [Monitoring with Azure Monitor](docs/operaciones/monitoring.md)
+* [Load testing](docs/desarrollo/loadtesting.md)
+* [Quality evaluation](docs/desarrollo/evaluation.md)
+* [Safety evaluation](docs/desarrollo/safety_evaluation.md)
+* [Índice Maestro de documentación](docs/analisis/INDICE-MAESTRO.md)
 
 Please post in the issue tracker with any questions or issues.
 

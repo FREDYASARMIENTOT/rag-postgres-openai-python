@@ -34,20 +34,32 @@ class FastAPIAppContext(BaseModel):
     modelo de embeddings, deployments, y columna de embedding activa.
 
     Tipos de campos:
-        openai_chat_model: Nombre del modelo para chat (ej: gpt-4o-mini).
+        openai_chat_host: Host backend para chat (azure, foundry, openai, ollama).
+        openai_embed_host: Host backend para embeddings.
+        openai_chat_model: Nombre del modelo para chat.
         openai_embed_model: Nombre del modelo para embeddings.
         openai_embed_dimensions: Dimensiones del vector de embedding
                                 (None si el modelo no soporta dimensions).
-        openai_chat_deployment: Deployment Azure (None si no es Azure).
-        openai_embed_deployment: Deployment Azure (None si no es Azure).
+        openai_chat_deployment: Deployment Azure/Foundry (None si no aplica).
+        openai_embed_deployment: Deployment Azure/Foundry (None si no aplica).
+        foundry_openai_endpoint: Endpoint Foundry (None si no aplica).
+        foundry_chat_deployment: Deployment Foundry para chat (None si no aplica).
+        foundry_embedding_deployment: Deployment Foundry para embeddings (None si no aplica).
+        foundry_embedding_dimensions: Dimensiones Foundry (None si no aplica).
         embedding_column: Nombre de la columna vectorial (embedding_3l o embedding_nomic).
     """
-    openai_chat_model: str
-    openai_embed_model: str
-    openai_embed_dimensions: Optional[int]
-    openai_chat_deployment: Optional[str]
-    openai_embed_deployment: Optional[str]
-    embedding_column: str
+    openai_chat_host: str = "azure"
+    openai_embed_host: str = "azure"
+    openai_chat_model: str = "gpt-4o-mini"
+    openai_embed_model: str = "text-embedding-3-large"
+    openai_embed_dimensions: Optional[int] = 1024
+    openai_chat_deployment: Optional[str] = None
+    openai_embed_deployment: Optional[str] = None
+    foundry_openai_endpoint: Optional[str] = None
+    foundry_chat_deployment: Optional[str] = None
+    foundry_embedding_deployment: Optional[str] = None
+    foundry_embedding_dimensions: Optional[int] = None
+    embedding_column: str = "embedding_3l"
 
 
 async def common_parameters():
@@ -63,6 +75,13 @@ async def common_parameters():
         - AZURE_OPENAI_EMBED_DEPLOYMENT -> deployment (default: text-embedding-3-large)
         - AZURE_OPENAI_EMBED_MODEL -> modelo (default: text-embedding-3-large)
         - AZURE_OPENAI_EMBED_DIMENSIONS -> dimensiones (default: 1024)
+        - AZURE_OPENAI_EMBEDDING_COLUMN -> columna vectorial (default: embedding_3l)
+
+    **Foundry** (OPENAI_EMBED_HOST == "foundry"):
+        - FOUNDRY_OPENAI_ENDPOINT -> endpoint Foundry
+        - FOUNDRY_EMBEDDING_DEPLOYMENT -> deployment (default: text-embedding-3-large)
+        - FOUNDRY_EMBEDDING_MODEL -> modelo (default: text-embedding-3-large)
+        - FOUNDRY_EMBEDDING_DIMENSIONS -> dimensiones (default: 1024)
         - AZURE_OPENAI_EMBEDDING_COLUMN -> columna vectorial (default: embedding_3l)
 
     **Ollama** (OPENAI_EMBED_HOST == "ollama"):
@@ -83,10 +102,23 @@ async def common_parameters():
     """
     OPENAI_EMBED_HOST = os.getenv("OPENAI_EMBED_HOST")
     OPENAI_CHAT_HOST = os.getenv("OPENAI_CHAT_HOST")
+    # Inicializar campos Foundry como None por defecto
+    foundry_openai_endpoint: Optional[str] = None
+    foundry_chat_deployment: Optional[str] = None
+    foundry_embedding_deployment: Optional[str] = None
+    foundry_embedding_dimensions: Optional[int] = None
     if OPENAI_EMBED_HOST == "azure":
         openai_embed_deployment = os.getenv("AZURE_OPENAI_EMBED_DEPLOYMENT") or "text-embedding-3-large"
         openai_embed_model = os.getenv("AZURE_OPENAI_EMBED_MODEL") or "text-embedding-3-large"
         openai_embed_dimensions = int(os.getenv("AZURE_OPENAI_EMBED_DIMENSIONS") or 1024)
+        embedding_column = os.getenv("AZURE_OPENAI_EMBEDDING_COLUMN") or "embedding_3l"
+    elif OPENAI_EMBED_HOST == "foundry":
+        foundry_openai_endpoint = os.getenv("FOUNDRY_OPENAI_ENDPOINT")
+        foundry_embedding_deployment = os.getenv("FOUNDRY_EMBEDDING_DEPLOYMENT") or "ur-rag-embedding-3-large"
+        foundry_embedding_dimensions = int(os.getenv("FOUNDRY_EMBEDDING_DIMENSIONS") or 1024)
+        openai_embed_deployment = foundry_embedding_deployment
+        openai_embed_model = os.getenv("FOUNDRY_EMBEDDING_MODEL") or "text-embedding-3-large"
+        openai_embed_dimensions = foundry_embedding_dimensions
         embedding_column = os.getenv("AZURE_OPENAI_EMBEDDING_COLUMN") or "embedding_3l"
     elif OPENAI_EMBED_HOST == "ollama":
         openai_embed_deployment = None
@@ -101,6 +133,10 @@ async def common_parameters():
     if OPENAI_CHAT_HOST == "azure":
         openai_chat_deployment = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT") or "gpt-5.4"
         openai_chat_model = os.getenv("AZURE_OPENAI_CHAT_MODEL") or "gpt-5.4"
+    elif OPENAI_CHAT_HOST == "foundry":
+        foundry_chat_deployment = os.getenv("FOUNDRY_CHAT_DEPLOYMENT") or "ur-rag-gpt-5-6-luna"
+        openai_chat_deployment = foundry_chat_deployment
+        openai_chat_model = os.getenv("FOUNDRY_CHAT_MODEL") or "gpt-5.6-luna"
     elif OPENAI_CHAT_HOST == "ollama":
         openai_chat_deployment = None
         openai_chat_model = os.getenv("OLLAMA_CHAT_MODEL") or "phi3:3.8b"
@@ -109,11 +145,17 @@ async def common_parameters():
         openai_chat_deployment = None
         openai_chat_model = os.getenv("OPENAICOM_CHAT_MODEL") or "gpt-3.5-turbo"
     return FastAPIAppContext(
+        openai_chat_host=OPENAI_CHAT_HOST or "",
+        openai_embed_host=OPENAI_EMBED_HOST or "",
         openai_chat_model=openai_chat_model,
         openai_embed_model=openai_embed_model,
         openai_embed_dimensions=openai_embed_dimensions,
         openai_chat_deployment=openai_chat_deployment,
         openai_embed_deployment=openai_embed_deployment,
+        foundry_openai_endpoint=foundry_openai_endpoint,
+        foundry_chat_deployment=foundry_chat_deployment,
+        foundry_embedding_deployment=foundry_embedding_deployment,
+        foundry_embedding_dimensions=foundry_embedding_dimensions,
         embedding_column=embedding_column,
     )
 

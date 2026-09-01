@@ -182,8 +182,8 @@ Regenera embeddings solo para items sin embedding válido o con checksum desactu
 
 ## Referencias
 
-- [Decisión de Embeddings](../decisions/DECISION-EMBEDDINGS.md)
-- [Arquitectura del RAG](../ARCHITECTURA-RAG.md)
+- [Decisión de Embeddings](../decisiones/DECISION-EMBEDDINGS.md)
+- [Arquitectura del RAG](../arquitectura/ARCHITECTURA-RAG.md)
 - Código: `src/backend/fastapi_app/embeddings.py`, `postgres_models.py`, `update_embeddings.py`
 
 ---

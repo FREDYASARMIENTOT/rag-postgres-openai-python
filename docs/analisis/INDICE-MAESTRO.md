@@ -400,3 +400,15 @@ FASE 3: Verificación de Modelo-IA-UR, BD, pgvector
 ---
 
 *Si tienes preguntas, lee GUIA-LECTURA-RAPIDA.md para encontrar el documento relevante.*
+
+---
+
+## 🆕 NUEVOS DOCUMENTOS — FASE FOUNDRY
+
+| Documento | Ruta | Propósito | Status |
+|-----------|------|-----------|--------|
+| FOUNDRY-INTEGRATION.md | `docs/arquitectura/FOUNDRY-INTEGRATION.md` | Integración Foundry (endpoint, auth, proveedores, migración) | ✅ CREADO v1.0 |
+| DECISION-LLM-FOUNDRY.md | `docs/decisiones/DECISION-LLM-FOUNDRY.md` | Decisión de crear `ur-rag-gpt-5-6-luna` como LLM dedicado del RAG | ✅ CREADO v2.0 |
+| DISEÑO-VECTORIAL-RAG.md | `docs/arquitectura/DISEÑO-VECTORIAL-RAG.md` | Diseño vectorial (embeddings, dimensiones, pgvector) | ✅ CREADO v1.0 |
+| proveedores.py | `src/backend/fastapi_app/proveedores.py` | Contratos abstractos ProveedorLLM / ProveedorEmbeddings | ✅ CREADO |
+| test_proveedores.py | `src/backend/tests/test_proveedores.py` | Tests unitarios (19 tests, 100% passing) | ✅ CREADO |

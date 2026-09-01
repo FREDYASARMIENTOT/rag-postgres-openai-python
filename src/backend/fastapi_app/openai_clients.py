@@ -6,6 +6,77 @@ import openai
 
 logger = logging.getLogger("ragapp")
 
+# =============================================================================
+# CONSTANTES DE AUTH
+# =============================================================================
+
+SCOPE_AZURE_COGNITIVE = "https://cognitiveservices.azure.com/.default"
+"""Scope de autenticación para Azure Cognitive Services (incluyendo Azure OpenAI)."""
+
+SCOPE_FOUNDRY_MODELS = "https://ml.azure.com/.default"
+"""Scope de autenticación para modelos desplegados en Foundry (Azure AI Studio)."""
+
+
+# =============================================================================
+# HELPERS
+# =============================================================================
+
+
+def _crear_cliente_openai_foundry(
+    azure_credential: azure.identity.aio.AzureDeveloperCliCredential
+    | azure.identity.aio.ManagedIdentityCredential
+    | None,
+    endpoint_var: str,
+    deploy_var: str,
+    servicio: str,
+) -> openai.AsyncOpenAI:
+    """Crea un cliente OpenAI apuntando a Foundry (Azure AI Studio) como endpoint.
+
+    Foundry expone modelos desplegados via el endpoint OpenAI v1 del recurso
+    de AI Services (Modelo-IA-UR). Usa la misma convención de URL que Azure
+    OpenAI pero apuntando al endpoint de Foundry configurado.
+
+    Args:
+        azure_credential: Credencial Azure Identity (Managed Identity o CLI).
+        endpoint_var: Nombre de variable de entorno para el endpoint.
+        deploy_var: Nombre de variable de entorno para el deployment.
+        servicio: Nombre descriptivo (chat/embeddings) para logs.
+
+    Returns:
+        AsyncOpenAI configurado para Foundry.
+    """
+    endpoint = os.environ[endpoint_var]
+    deployment = os.environ[deploy_var]
+    if api_key := os.getenv("AZURE_OPENAI_KEY"):
+        logger.info(
+            "Setting up Foundry client for %s using API key, endpoint %s, deployment %s",
+            servicio,
+            endpoint,
+            deployment,
+        )
+        return openai.AsyncOpenAI(
+            base_url=f"{endpoint.rstrip('/')}/openai/v1/",
+            api_key=api_key,
+        )
+    elif azure_credential:
+        logger.info(
+            "Setting up Foundry client for %s using Azure Identity, endpoint %s, deployment %s",
+            servicio,
+            endpoint,
+            deployment,
+        )
+        token_provider = azure.identity.aio.get_bearer_token_provider(
+            azure_credential, SCOPE_AZURE_COGNITIVE
+        )
+        return openai.AsyncOpenAI(
+            base_url=f"{endpoint.rstrip('/')}/openai/v1/",
+            api_key=token_provider,
+        )
+    else:
+        raise ValueError(
+            f"Foundry client for {servicio} requires either an API key or Azure Identity credential."
+        )
+
 
 async def create_openai_chat_client(
     azure_credential: azure.identity.aio.AzureDeveloperCliCredential
@@ -42,6 +113,13 @@ async def create_openai_chat_client(
             )
         else:
             raise ValueError("Azure OpenAI client requires either an API key or Azure Identity credential.")
+    elif OPENAI_CHAT_HOST == "foundry":
+        openai_chat_client = _crear_cliente_openai_foundry(
+            azure_credential,
+            endpoint_var="FOUNDRY_OPENAI_ENDPOINT",
+            deploy_var="FOUNDRY_CHAT_DEPLOYMENT",
+            servicio="chat",
+        )
     elif OPENAI_CHAT_HOST == "ollama":
         logger.info("Setting up OpenAI client for chat using Ollama")
         openai_chat_client = openai.AsyncOpenAI(
@@ -90,6 +168,13 @@ async def create_openai_embed_client(
             )
         else:
             raise ValueError("Azure OpenAI client requires either an API key or Azure Identity credential.")
+    elif OPENAI_EMBED_HOST == "foundry":
+        openai_embed_client = _crear_cliente_openai_foundry(
+            azure_credential,
+            endpoint_var="FOUNDRY_OPENAI_ENDPOINT",
+            deploy_var="FOUNDRY_EMBEDDING_DEPLOYMENT",
+            servicio="embeddings",
+        )
     elif OPENAI_EMBED_HOST == "ollama":
         logger.info("Setting up OpenAI client for embeddings using Ollama")
         openai_embed_client = openai.AsyncOpenAI(
