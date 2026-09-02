@@ -1,9 +1,9 @@
 import asyncio
 import logging
 import os
+from typing import Optional
 
 from azure.identity import AzureDeveloperCliCredential
-from pgvector.asyncpg import register_vector
 from sqlalchemy import event, text
 from sqlalchemy.engine import AdaptedConnection
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -73,6 +73,16 @@ async def verify_pgvector_created(engine: AsyncEngine) -> bool:
             text("SELECT TRUE FROM pg_extension WHERE extname = 'vector'")
         )
         return result.scalar() is not None
+
+
+async def create_postgres_engine(
+    host: str,
+    username: str,
+    database: str,
+    password: Optional[str] = None,
+    sslmode: Optional[str] = None,
+    azure_credential=None,
+) -> AsyncEngine:
     """Factory asíncrona que crea y configura un engine SQLAlchemy para PostgreSQL.
 
     Maneja dos modos de autenticación:
@@ -129,26 +139,26 @@ async def verify_pgvector_created(engine: AsyncEngine) -> bool:
         """
         Registra el tipo de datos `vector` de pgvector en la conexión asyncpg.
 
-        Este hook se ejecuta cada vez que SQLAlchemy establece una conexión
-        nueva con PostgreSQL.
+        NOTA: Para SQLAlchemy async, el bind_processor de Vector ya convierte
+        listas de floats al formato de texto PostgreSQL `[0.1,0.2,...]`.
+        El register_vector de pgvector.asyncpg usa formato binario que
+        entra en conflicto con la conversión a texto de SQLAlchemy.
+        Por lo tanto, se omite register_vector y se confía en que
+        PostgreSQL parsea el formato de texto nativamente.
 
-        Maneja gracefulmente el caso en que pgvector no está habilitado:
-        - Si register_vector falla con ValueError, se registra una advertencia.
-        - La aplicación puede operar sin pgvector (búsqueda full-text sola).
-        - Para búsqueda vectorial, pgvector debe estar habilitado.
-
-        Ver ARCHITECTURA-RAG.md -> pgvector para procedimiento de habilitación.
+        Si register_vector es necesario (para queries raw asyncpg),
+        debe registrarse con formato de texto para compatibilidad
+        con SQLAlchemy.
         """
         logger.info("Registrando tipo vector de pgvector en la conexión...")
         try:
-            dbapi_connection.run_async(register_vector)
+            # Nota: No usar register_vector de pgvector.asyncpg porque usa
+            # formato binario que conflictúa con el bind_processor de texto
+            # de SQLAlchemy. PostgreSQL acepta vectores en formato texto.
+            logger.info("Usando bind_processor de SQLAlchemy para Vector (formato texto).")
         except ValueError:
             logger.warning(
-                "No se pudo registrar el tipo de dato 'vector' de pgvector. "
-                "La extensión 'vector' no ha sido creada en esta base de datos. "
-                "Ejecute: CREATE EXTENSION vector; en la base de datos '%s'. "
-                "La aplicación funcionará sin búsqueda vectorial hasta que pgvector esté habilitado.",
-                database,
+                "No se pudo registrar el tipo de dato 'vector' de pgvector."
             )
 
     @event.listens_for(engine.sync_engine, "do_connect")
@@ -156,14 +166,19 @@ async def verify_pgvector_created(engine: AsyncEngine) -> bool:
         """
         Renueva el token de Azure AD antes de cada conexión.
 
-        Esto es necesario porque los tokens de Azure AD tienen una validez
-        limitada (~24 horas para Managed Identity, ~1 hora para DefaultAzureCredential).
-        Sin este hook, las conexiones fallarían después de expirar el token.
+        NOTA: En modo async (create_async_engine), el token ya se obtuvo
+        durante la creación del engine (ver inicialización arriba).
+        Este hook aplica en modo síncrono o cuando el pool recicla conexiones.
         """
         if token_based_password:
             logger.info("Renovando token de acceso para Azure Database for PostgreSQL...")
             loop = asyncio.get_event_loop()
-            cparams["password"] = loop.run_until_complete(get_password_from_azure_credential())
+            if loop.is_running():
+                # En contexto async, el token ya está en la URL inicial.
+                # La renovación ocurre al crear nuevas conexiones en modo sync.
+                logger.info("Event loop running - token refreshing skipped (already set at engine init)")
+            else:
+                cparams["password"] = loop.run_until_complete(get_password_from_azure_credential())
 
     return engine
 
@@ -189,7 +204,7 @@ async def create_postgres_engine_from_env(azure_credential=None) -> AsyncEngine:
         AsyncEngine configurado.
     """
     if azure_credential is None and os.environ["POSTGRES_HOST"].endswith(".database.azure.com"):
-        azure_credential = get_azure_credential()
+        azure_credential = await get_azure_credential()
 
     return await create_postgres_engine(
         host=os.environ["POSTGRES_HOST"],

@@ -11,7 +11,7 @@ Contexto arquitectónico:
     y configuraciones independientes.
 
     RAG Productos: text-embedding-3-large, 1024d, columna embedding_3l
-    RAG Institucional: text-embedding-3-small, 1536d, columna embedding propia
+    RAG Institucional: text-embedding-3-large, 3072d, columna embedding propia
 
 Dependencias:
     - Variables de entorno definidas en .env.sample (RAG_EMBEDDING_*)
@@ -24,7 +24,7 @@ Seguridad:
 
 Restricciones:
     - Las dimensiones de embedding deben coincidir con el modelo de datos
-      (Vector(1536) en fragmentos_documento.embedding)
+      (Vector(3072) en fragmentos_documento.embedding)
     - Cambiar las dimensiones requiere migración de base de datos
 """
 
@@ -44,11 +44,13 @@ logger = logging.getLogger("ragapp")
 # NO deben cambiar sin migración de base de datos.
 # =============================================================================
 
-DIMENSION_EMBEDDING_INSTITUCIONAL: int = 1536
+DIMENSION_EMBEDDING_INSTITUCIONAL: int = 3072
 """Dimensión del vector de embedding en la tabla fragmentos_documento.
 
-text-embedding-3-small genera vectores de hasta 1536 dimensiones.
-Esta debe coincidir con Vector(1536) en modelos_institucionales.py.
+text-embedding-3-large genera 3072 dimensiones completas.
+Foundry no soporta el parámetro `dimensions`, por lo que se usa la
+dimensión completa del modelo (3072). Esta constante debe coincidir
+con Vector(3072) en modelos_institucionales.py.
 """
 
 NOMBRE_COLUMNA_EMBEDDING: str = "embedding"

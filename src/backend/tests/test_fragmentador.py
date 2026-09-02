@@ -62,7 +62,7 @@ class TestFragmentacionMarkdown:
         f = FragmentadorDocumentos(tamano_maximo=2000)
         fragmentos = f.fragmentar(md)
         ordenes = [fr.orden for fr in fragmentos]
-        assert ordenes == [0, 1, 2]
+        assert ordenes == [1, 2, 3]
 
     def test_fragmentos_tienen_contenido_no_vacio(self):
         """Cada fragmento debe tener contenido no vacío."""

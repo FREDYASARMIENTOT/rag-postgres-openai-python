@@ -1,10 +1,13 @@
 # RAG Institucional Universidad del Rosario — Architecture Skill
 
 **Status:** Skill reusable para contexto arquitectónico permanente  
-**Versión:** 2.0  
-**Fecha:** 2026-09-01  
+**Versión:** 2.1  
+**Fecha:** 2026-01-09  
 **Proyecto:** RAG Institucional UR  
-**Rama:** tesis-rag-institucional
+**Rama:** tesis-rag-institucional  
+
+> **⚠️ ACTUALIZACIÓN 2026-01-09:** Corrección de Resource Group y confirmación de deployments.
+> Ver [rag-azure-foundry-urosario](../rag-azure-foundry-urosario/SKILL.md) para detalles Foundry.
 
 ---
 
@@ -40,10 +43,12 @@
 - Container Apps como plano de ejecución
 - Entra ID / Managed Identity como plano de identidad
 
-**Bloqueantes actuales:**
-- No hay deployment de embeddings confirmado en Modelo-IA-UR
-- pgvector no habilitado en supersetdev
-- BD rag_institucional no creada
+**Bloqueantes actuales (2026-01-09):**
+- ⚠️ ~~No hay deployment de embeddings confirmado~~ → ✅ CONFIRMADO `ur-rag-embedding-3-large` (ver skill Foundry)
+- ⚠️ ~~pgvector no habilitado~~ → ❌ SIGUE BLOQUEADO en supersetdev
+- ⚠️ ~~BD rag_institucional no creada~~ → ❌ SIGUE SIN CREAR
+- ⚠️ NUEVO: dimensions=1024 no soportado por deployment de embeddings real (3072d)
+- ⚠️ NUEVO: RG-Datamining-IA-UR es el RG correcto para Modelo-IA-UR (NO SII2.0-Dev)
 
 ---
 
@@ -87,7 +92,9 @@ Estado: En planificación
 - **Suscripción:** Sub-Tecnologia-Datamining (01bfad48-c092-4712-bc72-f141eb01a8d4)
 - **Tenant:** Universidad del Rosario (ae525757-89ba-4d30-a2f7-49796ef8c604)
 - **User:** analiticaur@urosario.edu.co
-- **RG Destino:** RG-RAG-Urosario (eastus)
+- **RG AI Resource (Modelo-IA-UR):** RG-Datamining-IA-UR (eastus) — **CORREGIDO 2026-01-09**
+- **RG PostgreSQL (supersetdev):** RG-Datamining-SII2.0-Dev
+- **RG Destino propuesto:** RG-RAG-Urosario (eastus) — aún sin crear
 
 ### Python Environment
 
@@ -335,8 +342,11 @@ Container App (web)
   ├─ PostgreSQL supersetdev ← datos
   │   └─ BD rag_institucional ← almacenamiento RAG
   │       └─ pgvector ← búsqueda semántica
-  ├─ Modelo-IA-UR / Azure OpenAI ← embeddings + chat
-  │   └─ Validar modelos disponibles
+  ├─ Modelo-IA-UR / AI Services ← embeddings + chat
+  │   ├─ RG correcto: RG-Datamining-IA-UR (corregido 2026-01-09)
+  │   ├─ 4 deployments confirmados (ver skill Foundry)
+  │   ├─ Chat: sii-supervisor-gpt-4o-mini, ur-rag-gpt-5-6-luna
+  │   └─ Embeddings: ur-rag-embedding-3-large (3072d, dimensions no soportado)
   ├─ Log Analytics ← logging centralizado
   └─ Application Insights ← observabilidad
 ```
@@ -376,6 +386,10 @@ Container App (web)
 - [AGENTS.md](../../AGENTS.md) — Instrucciones para agentes
 - [azure.yaml](../../azure.yaml) — Configuración azd
 - [infra/main.bicep](../../infra/main.bicep) — Template (requiere reparación)
+- [rag-azure-foundry-urosario/SKILL.md](../rag-azure-foundry-urosario/SKILL.md) — Azure AI Foundry (2026-01-09)
+- [rag-azure-urosario-configuration-lessons/SKILL.md](../rag-azure-urosario-configuration-lessons/SKILL.md) — Lecciones de configuración
+- [docs/pruebas/INFORME-AUDITORIA-RAG-INSTITUCIONAL.md](../../docs/pruebas/INFORME-AUDITORIA-RAG-INSTITUCIONAL.md) — Auditoría Foundry (2026-01-09)
+- [docs/pruebas/AREAS-FACULTADES-UR-EMBEDDING-TEST.md](../../docs/pruebas/AREAS-FACULTADES-UR-EMBEDDING-TEST.md) — Dataset de prueba
 
 ---
 

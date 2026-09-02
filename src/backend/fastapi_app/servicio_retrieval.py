@@ -141,17 +141,17 @@ class ServicioRetrieval:
         # Paso 3: Enriquecer con documento padre
         resultados = []
         for frag, score in fragmentos:
-            doc = await self.repositorio.obtener_documento_por_id(frag.documento_id)
+            doc = await self.repositorio.obtener_documento_por_id(frag.id_documento)
             if not doc:
                 continue
             resultados.append(ResultadoBusqueda(
                 contenido=frag.contenido,
-                documento_id=doc.id,
-                titulo=doc.titulo,
-                fuente=doc.fuente,
+                documento_id=doc.id_documento,
+                titulo=doc.titulo_documento,
+                fuente=doc.fuente_documento,
                 score=score,
-                metadatos=frag.metadatos,
-                fragmento_id=frag.id,
+                metadatos=None,
+                fragmento_id=frag.id_fragmento,
             ))
 
         logger.info("Retrieval: %d resultados", len(resultados))
@@ -173,16 +173,23 @@ class ServicioRetrieval:
             return None
         fragmentos = await self.repositorio.obtener_fragmentos_por_documento(documento_id)
         return {
-            "documento_id": doc.id,
-            "titulo": doc.titulo,
-            "contenido": doc.contenido,
-            "fuente": doc.fuente,
+            "documento_id": doc.id_documento,
+            "titulo": doc.titulo_documento,
+            "fuente": doc.fuente_documento,
             "tipo_documento": doc.tipo_documento,
-            "estado": doc.estado,
-            "metadatos": doc.metadatos,
+            "estado": doc.estado_vigencia,
+            "nombre_archivo_original": doc.nombre_archivo_original,
+            "extension_archivo": doc.extension_archivo,
+            "formato_id": doc.id_formato_archivo,
+            "cantidad_paginas": doc.cantidad_paginas,
             "cantidad_fragmentos": len(fragmentos),
             "fragmentos": [
-                {"id": f.id, "orden": f.orden, "contenido": f.contenido, "metadatos": f.metadatos}
+                {
+                    "id_fragmento": f.id_fragmento,
+                    "numero_orden": f.numero_orden,
+                    "contenido": f.contenido,
+                    "cantidad_caracteres": f.cantidad_caracteres,
+                }
                 for f in fragmentos
             ],
         }

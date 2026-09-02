@@ -7,12 +7,11 @@ Define:
 - Configuración condicional para tests AZURE.
 """
 
-from typing import Any, AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from openai import AsyncOpenAI
-from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # =============================================================================

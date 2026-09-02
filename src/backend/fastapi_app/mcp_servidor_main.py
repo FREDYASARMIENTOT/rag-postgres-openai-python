@@ -62,10 +62,11 @@ from fastapi_app.dependencies import (
     get_azure_credential,
 )
 from fastapi_app.mcp_servidor import crear_mcp_servidor
-from fastapi_app.openai_clients import create_openai_embed_client
+from fastapi_app.openai_clients import create_openai_chat_client, create_openai_embed_client
 from fastapi_app.postgres_engine import create_postgres_engine_from_env
-from fastapi_app.proveedores import crear_proveedor_embeddings
+from fastapi_app.proveedores import crear_proveedor_embeddings, crear_proveedor_llm
 from fastapi_app.repositorio_documentos import RepositorioDocumentos
+from fastapi_app.servicio_generacion import ServicioGeneracion
 from fastapi_app.servicio_ingesta import ServicioIngesta
 from fastapi_app.servicio_retrieval import ServicioRetrieval
 
@@ -125,6 +126,28 @@ async def main():
             dimensiones=config.rag_embed_dimensions,
         )
 
+    # Crear cliente de chat para Foundry con Luna
+    chat_client = None
+    proveedor_llm = None
+    try:
+        chat_client = await create_openai_chat_client(
+            azure_credential,
+            host_override="foundry",
+            deployment_override=config.rag_llm_deployment or config.rag_llm_model,
+        )
+        logger.info("Cliente de chat Foundry (Luna) creado exitosamente.")
+        proveedor_llm = crear_proveedor_llm(
+            cliente=chat_client,
+            modelo=config.rag_llm_model,
+            deployment=config.rag_llm_deployment,
+        )
+    except Exception as e:
+        logger.warning(
+            "No se pudo crear el cliente de chat Foundry: %s. "
+            "La generacion RAG no estara disponible.",
+            e,
+        )
+
     # Crear repositorio y servicios con sesión
     async with sessionmaker() as session:
         repositorio = RepositorioDocumentos(session)
@@ -136,12 +159,20 @@ async def main():
             repositorio=repositorio,
             proveedor_embeddings=proveedor_embeddings,
         )
+        servicio_generacion = None
+        if proveedor_llm:
+            servicio_generacion = ServicioGeneracion(
+                servicio_retrieval=servicio_retrieval,
+                proveedor_llm=proveedor_llm,
+            )
+            logger.info("ServicioGeneracion inicializado con %s/%s", proveedor_llm.modelo, proveedor_llm.deployment)
 
         # Crear y ejecutar servidor MCP
         mcp = crear_mcp_servidor(
             repositorio=repositorio,
             servicio_ingesta=servicio_ingesta,
             servicio_retrieval=servicio_retrieval,
+            servicio_generacion=servicio_generacion,
             nombre="UR-RAG-MCP-Server",
         )
 

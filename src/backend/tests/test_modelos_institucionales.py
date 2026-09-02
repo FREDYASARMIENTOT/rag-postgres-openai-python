@@ -5,13 +5,12 @@ Valida:
     1. Creación y estructura de Documento.
     2. Creación y estructura de FragmentoDocumento.
     3. Relación Documento -> FragmentoDocumento.
-    4. Vector(1536) en FragmentoDocumento.
+    4. Vector(3072) en FragmentoDocumento.
     5. Índices HNSW definidos correctamente.
 """
 
 from __future__ import annotations
 
-import pytest
 
 from fastapi_app.modelos_institucionales import (
     Documento,
@@ -73,14 +72,14 @@ class TestFragmentoDocumentoModel:
         esperadas = {"id", "documento_id", "orden", "contenido", "embedding", "created_at"}
         assert esperadas.issubset(columnas), f"Faltan: {esperadas - columnas}"
 
-    def test_embedding_es_vector_1536(self):
-        """embedding debe ser Vector(1536)."""
+    def test_embedding_es_vector_3072(self):
+        """embedding debe ser Vector(3072)."""
         col_embedding = FragmentoDocumento.__table__.columns["embedding"]
         assert col_embedding.type is not None
         # Verificar que es tipo Vector comprobando el nombre
         type_str = str(col_embedding.type)
         assert "VECTOR" in type_str.upper() or "Vector" in type_str
-        assert "1536" in type_str
+        assert "3072" in type_str
 
     def test_documento_id_es_foreign_key(self):
         """documento_id debe ser FK a documentos.id."""

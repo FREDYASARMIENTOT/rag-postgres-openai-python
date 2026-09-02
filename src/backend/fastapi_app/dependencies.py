@@ -84,12 +84,12 @@ class FastAPIAppContext(BaseModel):
     """Modelo LLM institucional."""
     rag_llm_deployment: Optional[str] = "ur-rag-gpt-5-6-luna"
     """Deployment LLM en Azure/Foundry."""
-    rag_embed_model: str = "text-embedding-3-small"
+    rag_embed_model: str = "text-embedding-3-large"
     """Modelo de embeddings institucional."""
-    rag_embed_deployment: Optional[str] = "ur-rag-embedding-3-small"
+    rag_embed_deployment: Optional[str] = "ur-rag-embedding-3-large"
     """Deployment de embeddings en Azure/Foundry."""
-    rag_embed_dimensions: int = 1536
-    """Dimensiones del embedding institucional (text-embedding-3-small = 1536)."""
+    rag_embed_dimensions: int = 3072
+    """Dimensiones del embedding institucional (text-embedding-3-large = 3072)."""
 
 
 async def common_parameters():
@@ -179,12 +179,12 @@ async def common_parameters():
     rag_chat_host = os.getenv("RAG_CHAT_HOST", "foundry")
     rag_llm_model = os.getenv("RAG_LLM_MODEL", "gpt-5.6-luna")
     rag_llm_deployment = os.getenv("RAG_LLM_DEPLOYMENT") or "ur-rag-gpt-5-6-luna"
-    rag_embed_model = os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-small")
-    rag_embed_deployment = os.getenv("RAG_EMBEDDING_DEPLOYMENT") or "ur-rag-embedding-3-small"
+    rag_embed_model = os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-large")
+    rag_embed_deployment = os.getenv("RAG_EMBEDDING_DEPLOYMENT") or "ur-rag-embedding-3-large"
     try:
-        rag_embed_dimensions = int(os.getenv("RAG_EMBEDDING_DIMENSIONS", "1536"))
+        rag_embed_dimensions = int(os.getenv("RAG_EMBEDDING_DIMENSIONS", "3072"))
     except (TypeError, ValueError):
-        rag_embed_dimensions = 1536
+        rag_embed_dimensions = 3072
 
     return FastAPIAppContext(
         openai_chat_host=OPENAI_CHAT_HOST or "",

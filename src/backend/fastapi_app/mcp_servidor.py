@@ -39,13 +39,13 @@ TRANSPORTE:
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Any, Optional
 
 from mcp.server.mcpserver import MCPServer
 
+from fastapi_app.servicio_generacion import ServicioGeneracion
 from fastapi_app.servicio_ingesta import ServicioIngesta
 from fastapi_app.servicio_retrieval import ServicioRetrieval
 from fastapi_app.repositorio_documentos import RepositorioDocumentos
@@ -65,6 +65,17 @@ TIPO_DOCUMENTO_PERMITIDOS = frozenset({
     "circular", "directriz", "informe", "manual",
     "guia", "formato", "general",
 })
+
+
+def _validar_usuario(usuario: str) -> str:
+    """Valida que el usuario esté presente y no exceda límites."""
+    if not usuario or not usuario.strip():
+        raise ValueError("El parámetro 'usuario' es obligatorio para esta operación.")
+    usuario = usuario.strip()
+    if len(usuario) > 200:
+        logger.warning("usuario truncado de %d a 200 caracteres", len(usuario))
+        usuario = usuario[:200]
+    return usuario
 
 
 def _validar_tipo_documento(tipo: str) -> str:
@@ -88,6 +99,7 @@ def crear_mcp_servidor(
     repositorio: RepositorioDocumentos,
     servicio_ingesta: ServicioIngesta,
     servicio_retrieval: ServicioRetrieval,
+    servicio_generacion: Optional[ServicioGeneracion] = None,
     nombre: str = "UR-RAG-MCP-Server",
 ) -> MCPServer:
     """Crea servidor MCP con herramientas del RAG Institucional.
@@ -111,53 +123,58 @@ def crear_mcp_servidor(
 
     @mcp.tool()
     async def cargar_contenido_rag(
-        titulo: str,
         contenido: str,
-        fuente: str = "",
+        usuario: str,
+        fuente: str = "sin fuente",
         tipo_documento: str = "general",
-        metadata: Optional[str] = None,
     ) -> dict:
-        """Carga nuevo contenido al RAG Institucional de la Universidad del Rosario.
+        """Carga contenido en el RAG Institucional de la Universidad del Rosario.
 
-        El documento se fragmenta, se generan embeddings y se almacena
-        en PostgreSQL + pgvector para búsqueda semántica posterior.
+        Divide el contenido en fragmentos, genera embeddings y persiste.
+        El tipo de documento se usa para indexar y filtrar (facultad, reglamento, etc).
+        El usuario es obligatorio para trazabilidad.
 
         Args:
-            titulo: Título descriptivo del documento.
-            contenido: Contenido en Markdown o texto plano.
-            fuente: Origen institucional (URL, dependencia).
-            tipo_documento: Clasificación permitida.
-            metadata: JSON opcional con metadatos.
+            contenido: Texto completo a cargar en el RAG.
+            usuario: Nombre o identificador del usuario que realiza la carga.
+            fuente: Origen institucional del contenido.
+            tipo_documento: Tipo documental (facultad, reglamento, resolucion,
+                           acuerdo, circular, directriz, informe, manual,
+                           guia, formato, general). Default: 'general'.
 
         Returns:
-            Dict: documento_id, titulo, cantidad_fragmentos, estado, fuente.
+            Dict con: documento_id, titulo, cantidad_fragmentos, estado, fuente.
 
         Raises:
-            ValueError: Validaciones de entrada.
+            ValueError: Contenido vacío o usuario no proporcionado.
         """
-        # Validar tamaño
+        tipo_valido = _validar_tipo_documento(tipo_documento)
+        usuario_validado = _validar_usuario(usuario)
+
+        if not contenido or not contenido.strip():
+            raise ValueError("El contenido no puede estar vacío.")
+
         if len(contenido) > TAMANO_MAXIMO_CONTENIDO:
             raise ValueError(
                 f"Contenido excede máximo de {TAMANO_MAXIMO_CONTENIDO} "
                 f"caracteres (recibido: {len(contenido)})."
             )
 
-        tipo_valido = _validar_tipo_documento(tipo_documento)
-
-        # Parsear metadata JSON
-        metadata_dict: Optional[dict] = None
-        if metadata:
-            try:
-                metadata_dict = json.loads(metadata)
-                if not isinstance(metadata_dict, dict):
-                    raise ValueError("metadata debe ser un objeto JSON.")
-            except json.JSONDecodeError as e:
-                raise ValueError(f"metadata JSON inválido: {e}")
+        # Primeras 100 líneas como título
+        lineas = contenido.strip().split("\n")
+        titulo = lineas[0].strip()[:200]
+        if not titulo:
+            titulo = f"Documento {tipo_valido} - {fuente}"
 
         resultado = await servicio_ingesta.ingestar(
             titulo=titulo, contenido=contenido,
             fuente=fuente, tipo_documento=tipo_valido,
-            metadatos=metadata_dict,
+            usuario_cargador=usuario_validado,
+        )
+        logger.info(
+            "Carga exitosa: id=%d tipo=%s frags=%d usuario=%s",
+            resultado.documento_id, tipo_valido, resultado.cantidad_fragmentos,
+            usuario_validado,
         )
         return resultado.to_dict()
 
@@ -168,25 +185,28 @@ def crear_mcp_servidor(
     @mcp.tool()
     async def consultar_rag_institucional(
         consulta: str,
+        usuario: str,
         limite: int = 10,
     ) -> list[dict]:
         """Consulta el RAG Institucional de la Universidad del Rosario.
 
         Busca fragmentos de documentos relevantes para la consulta
-        usando búsqueda semántica vectorial (text-embedding-3-small, 1536d).
+        usando búsqueda semántica vectorial (text-embedding-3-large, 3072d).
 
         Args:
             consulta: Pregunta o frase en lenguaje natural.
+            usuario: Nombre o identificador del usuario que consulta.
             limite: Número máximo de resultados (1-50, default: 10).
 
         Returns:
             Lista de resultados con: contenido, documento_id, titulo,
-            fuente, score, metadata. Ordenados por relevancia.
+            fuente, score. Ordenados por relevancia.
             Score: distancia coseno (0 = idéntico, mayor = menos similar).
 
         Raises:
             ValueError: Consulta vacía.
         """
+        _validar_usuario(usuario)
         limite_acotado = _validar_limite(limite)
 
         resultados = await servicio_retrieval.consultar(
@@ -201,6 +221,7 @@ def crear_mcp_servidor(
     @mcp.tool()
     async def obtener_documento_rag(
         documento_id: int,
+        usuario: str,
     ) -> dict:
         """Obtiene un documento completo del RAG Institucional.
 
@@ -208,15 +229,17 @@ def crear_mcp_servidor(
 
         Args:
             documento_id: ID numérico del documento.
+            usuario: Nombre o identificador del usuario que consulta.
 
         Returns:
-            Dict con: documento_id, titulo, contenido, fuente,
-            tipo_documento, estado, metadata, cantidad_fragmentos,
+            Dict con: documento_id, titulo, fuente,
+            tipo_documento, estado, cantidad_fragmentos,
             fragmentos (lista ordenada).
 
         Raises:
             ValueError: Si el documento_id no existe.
         """
+        _validar_usuario(usuario)
         if documento_id <= 0:
             raise ValueError(f"documento_id debe ser positivo: {documento_id}")
 
@@ -224,5 +247,40 @@ def crear_mcp_servidor(
         if resultado is None:
             raise ValueError(f"Documento con id {documento_id} no encontrado.")
         return resultado
+
+    # =========================================================================
+    # HERRAMIENTA 4: consultar_rag_con_generacion (si servicio_generacion esta disponible)
+    # =========================================================================
+
+    if servicio_generacion:
+
+        @mcp.tool()
+        async def consultar_rag_con_generacion(
+            consulta: str,
+            usuario: str,
+            limite: int = 5,
+        ) -> dict:
+            """Consulta el RAG Institucional y genera una respuesta fundamentada.
+
+            Realiza busqueda semantica sobre los documentos institucionales y
+            genera una respuesta utilizando GPT-5.6 Luna (ur-rag-gpt-5-6-luna)
+            fundamentada exclusivamente en los fragmentos recuperados.
+
+            Args:
+                consulta: Pregunta en lenguaje natural.
+                usuario: Nombre o identificador del usuario que consulta.
+                limite: Numero maximo de fragmentos a recuperar (1-10, default: 5).
+
+            Returns:
+                Dict con: consulta, respuesta, fragmentos_count, deployment,
+                modelo, fragmentos (contenido, score, titulo, fuente).
+            """
+            _validar_usuario(usuario)
+            limite_acotado = max(1, min(int(limite), 10))
+
+            resultado = await servicio_generacion.consultar_con_generacion(
+                consulta=consulta, limite=limite_acotado,
+            )
+            return resultado.to_dict()
 
     return mcp

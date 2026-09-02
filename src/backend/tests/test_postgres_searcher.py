@@ -14,11 +14,9 @@ Cobertura de lógica de búsqueda:
 - INTEGRATION 2: search_and_embed con text search only.
 """
 
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.api_models import Filter
 from fastapi_app.postgres_searcher import (
@@ -156,7 +154,7 @@ class TestSearchAndEmbed:
         """Solo búsqueda textual, sin vector."""
         with patch.object(searcher, "search", new_callable=AsyncMock) as mock_search:
             mock_search.return_value = []
-            resultado = await searcher.search_and_embed(
+            _resultado = await searcher.search_and_embed(
                 query_text="test query", top=5,
                 enable_vector_search=False, enable_text_search=True,
             )

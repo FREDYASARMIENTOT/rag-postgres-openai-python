@@ -11,13 +11,18 @@ from openai import AsyncOpenAI
 #
 # Modelos que soportan dimensions:
 #   - text-embedding-3-small (hasta 1536)
-#   - text-embedding-3-large (hasta 3072, pero usamos 1024)
+#   - text-embedding-3-large (hasta 3072)
 #
 # Modelos que NO soportan dimensions (usar siempre la dimensión completa):
 #   - text-embedding-ada-002 (fijo 1536)
 #
 # Para otros modelos no listados aquí, asumir que NO soportan dimensions
 # a menos que se verifique explícitamente en la documentación de OpenAI.
+#
+# IMPORTANTE: Foundry (Azure AI Studio) NO soporta el parámetro `dimensions`.
+# Cuando la dimensión solicitada sea la máxima del modelo (3072 para
+# text-embedding-3-large), el código omite el envío de `dimensions`
+# para compatibilidad con Foundry. Ver MODELOS_EMBEDDING_DIMENSIONES_MAXIMAS.
 # =============================================================================
 
 MODELOS_EMBEDDING_CON_DIMENSIONES_CONFIGURABLES = frozenset({
@@ -26,13 +31,27 @@ MODELOS_EMBEDDING_CON_DIMENSIONES_CONFIGURABLES = frozenset({
 })
 """Conjunto de modelos que aceptan el parámetro `dimensions` en la API de embeddings."""
 
-# Decisión de embedding (Fase Foundry, align con script deployment):
+MODELOS_EMBEDDING_DIMENSIONES_MAXIMAS: dict[str, int] = {
+    "text-embedding-3-small": 1536,
+    "text-embedding-3-large": 3072,
+}
+"""Dimensión máxima nativa de cada modelo de embedding.
+
+Cuando la dimensión solicitada coincide con la máxima del modelo,
+no se envía el parámetro `dimensions` a la API. Esto permite
+compatibilidad con Foundry (Azure AI Studio), que no soporta
+dicho parámetro.
+
+Uso:
+    - Si dimensions < max -> se envía `dimensions=N` (reducción).
+    - Si dimensions >= max -> NO se envía (API devuelve la máxima).
+"""
+
+# Decisión de embedding (Fase Foundry):
 #   - Modelo seleccionado: text-embedding-3-large
-#   - Deployment creado: ur-rag-embedding-3-large (por deploy-foundry-rag-institucional.ps1)
-#   - Dimensiones: 1024 (configurable vía FOUNDRY_EMBEDDING_DIMENSIONS o AZURE_OPENAI_EMBED_DIMENSIONS)
-#   - Alternativa: text-embedding-3-small (1536d, menor costo)
-#   - Ver docs/decisiones/DECISION-EMBEDDINGS.md para detalles
-#   - Referencia: docs/decisiones/DECISION-EMBEDDINGS.md
+#   - Deployment real: ur-rag-embedding-3-large
+#   - Dimensiones: 3072 (completas, sin parámetro dimensions para Foundry)
+#   - RAG Productos: text-embedding-3-large, 1024d (usa dimensions normalmente)
 
 
 async def compute_text_embedding(
@@ -53,29 +72,38 @@ async def compute_text_embedding(
         texto_consulta: Texto del cual generar el embedding.
         cliente_openai: Cliente OpenAI (AsyncOpenAI) configurado.
         modelo_embedding: Nombre del modelo de embeddings a utilizar.
-        deployment_embedding: Nombre del deployment (solo Azure) o None.
-        dimensiones_embedding: Dimensiones deseadas (solo para modelos
-                               que soportan el parámetro `dimensions`).
+        deployment_embedding: Nombre del deployment (solo Azure/Foundry)
+                              o None para OpenAI.com.
+        dimensiones_embedding: Dimensiones deseadas. Para modelos que
+                              soportan `dimensions` (text-embedding-3-*):
+                              - Si es None: no se envía el parámetro,
+                                la API devuelve la dimensión completa.
+                              - Si es < máximo del modelo: se envía
+                                `dimensions=N` para reducir la salida.
+                              - Si es >= máximo del modelo: no se envía
+                                (compatible con Foundry que no soporta
+                                el parámetro `dimensions`).
 
     Returns:
         Lista de floats con el vector de embedding.
 
     Raises:
-        ValueError: Si el modelo requiere dimensiones y no se proporcionan.
         openai.APIError: Si el API de OpenAI/Azure OpenAI no responde
                          o el deployment no existe.
 
     Dependencias externas:
         - OpenAI API (o Azure OpenAI vía AsyncOpenAI con base_url personalizado).
         - El deployment debe existir en el recurso configurado.
+        - Foundry no soporta el parámetro `dimensions`; el código lo omite
+          automáticamente cuando la dimensión solicitada es la máxima.
 
     Ejemplo:
         >>> vector = await compute_text_embedding(
         ...     "¿Qué documentos tratan sobre admisiones?",
         ...     cliente_openai,
         ...     modelo_embedding="text-embedding-3-large",
-        ...     deployment_embedding="text-embedding-3-large",
-        ...     dimensiones_embedding=1024,
+        ...     deployment_embedding="ur-rag-embedding-3-large",
+        ...     dimensiones_embedding=3072,
         ... )
     """
     class ArgumentosExtra(TypedDict, total=False):
@@ -84,12 +112,20 @@ async def compute_text_embedding(
     argumentos_dimension: ArgumentosExtra = {}
     if modelo_embedding in MODELOS_EMBEDDING_CON_DIMENSIONES_CONFIGURABLES:
         if dimensiones_embedding is None:
-            raise ValueError(
-                f"El modelo de embeddings '{modelo_embedding}' requiere "
-                "que se especifique el número de dimensiones. "
-                "Configure AZURE_OPENAI_EMBED_DIMENSIONS o similar."
-            )
-        argumentos_dimension = {"dimensions": dimensiones_embedding}
+            # Sin dimensions especificadas: no enviar parámetro.
+            # La API devuelve la dimensión completa del modelo.
+            # Esto permite compatibilidad con Foundry, que no soporta
+            # el parámetro `dimensions` en la API de embeddings.
+            pass
+        else:
+            dimension_maxima = MODELOS_EMBEDDING_DIMENSIONES_MAXIMAS.get(modelo_embedding)
+            if dimension_maxima is not None and dimensiones_embedding < dimension_maxima:
+                # Solo enviar dimensions si se solicita una reducción
+                # respecto a la dimensión máxima del modelo.
+                argumentos_dimension = {"dimensions": dimensiones_embedding}
+            # Si dimensiones_embedding >= dimension_maxima, no enviar
+            # dimensions (la API devuelve la dimensión máxima por defecto).
+            # Esto es necesario para compatibilidad con Foundry.
     elif dimensiones_embedding is not None:
         # El modelo no soporta dimensions, pero se proporcionó.
         # Ignorar silenciosamente para compatibilidad.

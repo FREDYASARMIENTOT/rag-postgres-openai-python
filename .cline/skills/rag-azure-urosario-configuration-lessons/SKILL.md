@@ -1,10 +1,14 @@
 # RAG Institucional — Configuration & Lessons Learned Skill
 
 **Status:** Skill reutilizable — Lecciones de Configuración  
-**Versión:** 2.0  
-**Fecha:** 2026-09-01  
+**Versión:** 2.1  
+**Fecha:** 2026-01-09  
 **Proyecto:** RAG Institucional UR  
 **Rama:** tesis-rag-institucional  
+
+> **⚠️ ACTUALIZACIÓN 2026-01-09:** Deployment names confirmados tras auditoría Foundry.
+> Dimensiones reales de embedding: 3072 (NO 1024).
+> Ver [rag-azure-foundry-urosario](../rag-azure-foundry-urosario/SKILL.md) para detalles Foundry.  
 
 ---
 
@@ -19,12 +23,13 @@
 - SQL Security: whitelists implementadas en `postgres_searcher.py`
 - Tests: 38 unit tests + 2 azure con marcadores `--run-azure`
 
-**Próximos pasos de configuración (Fase 4/5):**
-- Migrar a variables Foundry (FOUNDRY_PROJECT_ENDPOINT, etc.)
-- Confirmar deployment de embeddings en Modelo-IA-UR
-- Confirmar deployment de chat en Modelo-IA-UR
-- Habilitar pgvector en supersetdev
-- Crear BD rag_institucional
+**Próximos pasos de configuración (Fase 4/5 — 2026-01-09):**
+- ~~Migrar a variables Foundry~~ → ✅ NUEVAS variables definidas, deployment names confirmados
+- ~~Confirmar deployment de embeddings~~ → ✅ CONFIRMADO: `ur-rag-embedding-3-large` (3072d, dimensions no soportado)
+- ~~Confirmar deployment de chat~~ → ✅ CONFIRMADO: `sii-supervisor-gpt-4o-mini` + `ur-rag-gpt-5-6-luna`
+- ~~Confirmar `AZURE_OPENAI_EMBED_DIMENSIONS=1024`~~ → ❌ DIMENSIÓN REAL = 3072 (ver skill Foundry)
+- Habilitar pgvector en supersetdev (PENDIENTE)
+- Crear BD rag_institucional (PENDIENTE)
 
 ---
 
@@ -470,12 +475,12 @@ TESTEAR .env.sample localmente antes de commitar
 | POSTGRES_DATABASE | ✅ | rag_institucional | rag_institucional | ✅ | NUNCA usar "superset" |
 | POSTGRES_PASSWORD | ⚠️ | postgres | (empty si Azure Identity) | ✅ | Preferir Azure Identity |
 | POSTGRES_SSL | ✅ | disable | require | N/A | Azure requiere SSL |
-| AZURE_OPENAI_ENDPOINT | ⚠️ | N/A | Modelo-IA-UR | ✅ | VERIFICAR antes de usar |
-| AZURE_OPENAI_CHAT_DEPLOYMENT | ⚠️ | N/A | (TBD) | ✅ | CONFIRMAR en Modelo-IA-UR |
-| AZURE_OPENAI_CHAT_MODEL | ⚠️ | N/A | (TBD) | ✅ | CONFIRMAR disponibilidad |
-| AZURE_OPENAI_EMBED_DEPLOYMENT | ⚠️ | N/A | (TBD) | ✅ | CONFIRMAR en Modelo-IA-UR |
-| AZURE_OPENAI_EMBED_MODEL | ⚠️ | N/A | (TBD) | ✅ | CONFIRMAR disponibilidad |
-| AZURE_OPENAI_EMBED_DIMENSIONS | ⚠️ | N/A | 1024 | ✅ | Debe soportar embedding model |
+| AZURE_OPENAI_ENDPOINT | ⚠️ | N/A | https://modelo-ia-ur... | ✅ | VERIFICAR antes de usar |
+| AZURE_OPENAI_CHAT_DEPLOYMENT | ⚠️ | N/A | sii-supervisor-gpt-4o-mini | ✅ | También ur-rag-gpt-5-6-luna disponible |
+| AZURE_OPENAI_CHAT_MODEL | ⚠️ | N/A | gpt-4o-mini | ✅ | O gpt-5.6-luna para ur-rag-gpt-5-6-luna |
+| AZURE_OPENAI_EMBED_DEPLOYMENT | ⚠️ | N/A | ur-rag-embedding-3-large | ✅ | CONFIRMADO en Modelo-IA-UR |
+| AZURE_OPENAI_EMBED_MODEL | ⚠️ | N/A | text-embedding-3-large | ✅ | Modelo subyacente al deployment |
+| AZURE_OPENAI_EMBED_DIMENSIONS | ⚠️ | N/A | ⚠️ VER NOTA | ✅ | ⚠️ 1024 NO SOPORTADO. Real: 3072 sin dimensions |
 | AZURE_OPENAI_KEY | ❌ | N/A | (empty) | ✅ | Preferir Azure Identity |
 | AZURE_TENANT_ID | ⚠️ | N/A | ae525757... | N/A | Necesario para Entra ID |
 
@@ -499,9 +504,13 @@ TESTEAR .env.sample localmente antes de commitar
 
 ## 📚 ARCHIVOS RELACIONADOS
 
+- [rag-azure-foundry-urosario/SKILL.md](../rag-azure-foundry-urosario/SKILL.md) — Azure AI Foundry (skill complementaria)
+- [rag-azure-urosario-architecture/SKILL.md](../rag-azure-urosario-architecture/SKILL.md) — Arquitectura general
+- [docs/pruebas/INFORME-AUDITORIA-RAG-INSTITUCIONAL.md](../../docs/pruebas/INFORME-AUDITORIA-RAG-INSTITUCIONAL.md) — Auditoría Foundry
 - [.env.sample.aligned](.env.sample.aligned) — Propuesta de .env.sample actualizado
 - [src/backend/fastapi_app/postgres_engine.py](src/backend/fastapi_app/postgres_engine.py) — Autenticación PostgreSQL
 - [src/backend/fastapi_app/openai_clients.py](src/backend/fastapi_app/openai_clients.py) — Múltiples backends OpenAI
+- [src/backend/fastapi_app/embeddings.py](src/backend/fastapi_app/embeddings.py) — compute_text_embedding (envía dimensions=1024)
 - [src/backend/fastapi_app/dependencies.py](src/backend/fastapi_app/dependencies.py) — Variables de entorno de app
 
 ---

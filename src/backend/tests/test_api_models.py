@@ -16,7 +16,6 @@ from fastapi_app.api_models import (
     ChatRequestOverrides,
     Filter,
     ItemPublic,
-    ItemWithDistance,
     PriceFilter,
     RetrievalMode,
     SearchResults,

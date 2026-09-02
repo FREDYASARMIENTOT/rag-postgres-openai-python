@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Optional
 
 import azure.identity.aio
 import openai
@@ -82,12 +83,18 @@ async def create_openai_chat_client(
     azure_credential: azure.identity.aio.AzureDeveloperCliCredential
     | azure.identity.aio.ManagedIdentityCredential
     | None,
+    host_override: Optional[str] = None,
+    deployment_override: Optional[str] = None,
 ) -> openai.AsyncOpenAI:
     openai_chat_client: openai.AsyncOpenAI
-    OPENAI_CHAT_HOST = os.getenv("OPENAI_CHAT_HOST")
-    if OPENAI_CHAT_HOST == "azure":
+    host = host_override if host_override is not None else os.getenv("OPENAI_CHAT_HOST")
+    if host == "azure":
         azure_endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
-        azure_deployment = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
+        azure_deployment = (
+            deployment_override
+            if deployment_override is not None
+            else os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
+        )
         if api_key := os.getenv("AZURE_OPENAI_KEY"):
             logger.info(
                 "Setting up Azure OpenAI client for chat using API key, endpoint %s, deployment %s",
@@ -105,7 +112,7 @@ async def create_openai_chat_client(
                 azure_deployment,
             )
             token_provider = azure.identity.aio.get_bearer_token_provider(
-                azure_credential, "https://cognitiveservices.azure.com/.default"
+                azure_credential, SCOPE_AZURE_COGNITIVE
             )
             openai_chat_client = openai.AsyncOpenAI(
                 base_url=f"{azure_endpoint.rstrip('/')}/openai/v1/",
@@ -113,14 +120,32 @@ async def create_openai_chat_client(
             )
         else:
             raise ValueError("Azure OpenAI client requires either an API key or Azure Identity credential.")
-    elif OPENAI_CHAT_HOST == "foundry":
-        openai_chat_client = _crear_cliente_openai_foundry(
-            azure_credential,
-            endpoint_var="FOUNDRY_OPENAI_ENDPOINT",
-            deploy_var="FOUNDRY_CHAT_DEPLOYMENT",
-            servicio="chat",
+    elif host == "foundry":
+        deploy_name = deployment_override if deployment_override is not None else \
+            os.environ.get("FOUNDRY_CHAT_DEPLOYMENT", "unknown")
+        logger.info(
+            "Setting up Foundry client for chat, deployment %s",
+            deploy_name,
         )
-    elif OPENAI_CHAT_HOST == "ollama":
+        endpoint = os.environ["FOUNDRY_OPENAI_ENDPOINT"]
+        if api_key := os.getenv("AZURE_OPENAI_KEY"):
+            openai_chat_client = openai.AsyncOpenAI(
+                base_url=f"{endpoint.rstrip('/')}/openai/v1/",
+                api_key=api_key,
+            )
+        elif azure_credential:
+            token_provider = azure.identity.aio.get_bearer_token_provider(
+                azure_credential, SCOPE_AZURE_COGNITIVE
+            )
+            openai_chat_client = openai.AsyncOpenAI(
+                base_url=f"{endpoint.rstrip('/')}/openai/v1/",
+                api_key=token_provider,
+            )
+        else:
+            raise ValueError(
+                "Foundry client for chat requires either an API key or Azure Identity credential."
+            )
+    elif host == "ollama":
         logger.info("Setting up OpenAI client for chat using Ollama")
         openai_chat_client = openai.AsyncOpenAI(
             base_url=os.getenv("OLLAMA_ENDPOINT"),

@@ -51,27 +51,39 @@ class TestModelosEmbeddingConocidos:
 class TestComputeTextEmbeddingConfig:
     """Prueba la validación de configuración antes de llamar a la API."""
 
-    @pytest.mark.parametrize("modelo", [
-        "text-embedding-3-large",
-        "text-embedding-3-small",
+    @pytest.mark.parametrize("modelo, dimension_esperada", [
+        ("text-embedding-3-large", 3072),
+        ("text-embedding-3-small", 1536),
     ])
     @pytest.mark.asyncio
-    async def test_modelo_requiere_dimensions_sin_dimensiones(self, modelo):
+    async def test_modelo_sin_dimensiones_usa_maximo(self, modelo, dimension_esperada):
         """
         Si el modelo soporta dimensions pero no se proporcionan,
-        debe lanzar ValueError.
+        no se envía el parámetro `dimensions` y la API devuelve
+        la dimensión completa del modelo.
+        Este comportamiento es necesario para compatibilidad con Foundry,
+        que no soporta el parámetro `dimensions`.
         """
         cliente_mock = AsyncMock()
-        with pytest.raises(ValueError, match="requiere"):
-            await compute_text_embedding(
-                texto_consulta="test query",
-                cliente_openai=cliente_mock,
-                modelo_embedding=modelo,
-                deployment_embedding=None,
-                dimensiones_embedding=None,
-            )
-        # Verificar que NO se llamó a la API
-        cliente_mock.embeddings.create.assert_not_called()
+        # Mock respuesta con dimensión completa
+        mock_embedding = AsyncMock()
+        mock_embedding.data = [MagicMock(embedding=[0.1] * dimension_esperada)]
+        cliente_mock.embeddings.create = AsyncMock(return_value=mock_embedding)
+
+        vector = await compute_text_embedding(
+            texto_consulta="test query",
+            cliente_openai=cliente_mock,
+            modelo_embedding=modelo,
+            deployment_embedding=None,
+            dimensiones_embedding=None,
+        )
+        # Verificar que se llamó a la API SIN dimensions
+        cliente_mock.embeddings.create.assert_called_once_with(
+            model=modelo,
+            input="test query",
+        )
+        # Verificar que devolvió la dimensión esperada
+        assert len(vector) == dimension_esperada
 
     @pytest.mark.parametrize("modelo", [
         "text-embedding-ada-002",

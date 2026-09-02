@@ -115,6 +115,15 @@ class ServicioIngesta:
         fuente: str = "",
         tipo_documento: str = "general",
         metadatos: Optional[dict] = None,
+        usuario_cargador: Optional[str] = None,
+        identificador_usuario_cargador: Optional[str] = None,
+        id_formato_archivo: Optional[int] = None,
+        nombre_archivo_original: Optional[str] = None,
+        extension_archivo: Optional[str] = None,
+        mime_type: Optional[str] = None,
+        cantidad_paginas: Optional[int] = None,
+        tamano_bytes: Optional[int] = None,
+        hash_sha256: Optional[str] = None,
     ) -> ResultadoIngesta:
         """Ejecuta el pipeline completo de ingestión.
 
@@ -140,17 +149,25 @@ class ServicioIngesta:
 
         logger.info("Ingesta: titulo='%s' tipo='%s'", titulo, tipo_documento)
 
-        # Paso 2: Crear documento
+        # Paso 2: Crear documento con metadatos extendidos
         documento = await self.repositorio.crear_documento(
-            titulo=titulo, contenido=contenido,
-            fuente=fuente, tipo_documento=tipo_documento,
-            metadatos=metadatos,
+            titulo_documento=titulo, contenido=contenido,
+            fuente_documento=fuente, tipo_documento=tipo_documento,
+            id_formato_archivo=id_formato_archivo,
+            nombre_archivo_original=nombre_archivo_original,
+            extension_archivo=extension_archivo,
+            mime_type=mime_type,
+            cantidad_paginas=cantidad_paginas,
+            tamano_bytes=tamano_bytes,
+            hash_sha256=hash_sha256,
+            usuario_cargador=usuario_cargador,
+            identificador_usuario_cargador=identificador_usuario_cargador,
         )
 
         try:
             # Paso 3: Fragmentar
             fragmentos = self.fragmentador.fragmentar(contenido)
-            logger.info("Doc %d: %d fragmentos", documento.id, len(fragmentos))
+            logger.info("Doc %d: %d fragmentos", documento.id_documento, len(fragmentos))
 
             # Paso 4-5: Embeddings y persistencia
             for frag in fragmentos:
@@ -164,20 +181,19 @@ class ServicioIngesta:
                         dimensiones_embedding=self.proveedor_embeddings.dimensiones,
                     )
                 await self.repositorio.crear_fragmento(
-                    documento_id=documento.id,
+                    documento_id=documento.id_documento,
                     contenido=frag.contenido,
-                    orden=frag.orden,
+                    numero_orden=frag.orden,
                     embedding=embedding,
-                    metadatos=frag.metadata,
                 )
 
             # Paso 6: Commit
             await self.repositorio.session.commit()
 
-            logger.info("Ingesta OK: doc_id=%d frags=%d", documento.id, len(fragmentos))
+            logger.info("Ingesta OK: doc_id=%d frags=%d", documento.id_documento, len(fragmentos))
             return ResultadoIngesta(
-                documento_id=documento.id,
-                titulo=documento.titulo,
+                documento_id=documento.id_documento,
+                titulo=documento.titulo_documento,
                 cantidad_fragmentos=len(fragmentos),
                 estado="exitoso",
                 fuente=fuente,
@@ -194,27 +210,62 @@ class ServicioIngesta:
         ruta_archivo: str,
         fuente: str = "",
         tipo_documento: str = "general",
-        metadatos: Optional[dict] = None,
+        usuario_cargador: Optional[str] = None,
+        identificador_usuario_cargador: Optional[str] = None,
     ) -> ResultadoIngesta:
-        """Ingiere un documento desde archivo Markdown.
+        """Ingiere un documento desde archivo usando el extractor multiformato.
 
-        El nombre del archivo (sin extensión) se usa como título.
+        Selecciona automáticamente el extractor según la extensión del archivo
+        (MD, PDF, TXT) y extrae contenido, metadatos y hash. El nombre del
+        archivo (sin extensión) se usa como título del documento.
 
         Raises:
             FileNotFoundError: Archivo no existe.
+            ValueError: Formato no soportado.
         """
-        import os
-        if not os.path.exists(ruta_archivo):
+        from pathlib import Path
+        from fastapi_app.extractor_documentos import extraer_documento
+
+        path = Path(ruta_archivo)
+        if not path.exists():
             raise FileNotFoundError(f"Archivo no encontrado: {ruta_archivo}")
 
-        with open(ruta_archivo, "r", encoding="utf-8") as f:
-            contenido = f.read()
+        resultado_extraccion = extraer_documento(ruta_archivo)
+        if not resultado_extraccion.exito:
+            raise ValueError(f"Error extrayendo documento: {resultado_extraccion.error}")
 
-        titulo = os.path.splitext(os.path.basename(ruta_archivo))[0]
-        titulo = titulo.replace("-", " ").replace("_", " ").title()
+        titulo = path.stem.replace("-", " ").replace("_", " ").title()
+
+        # Obtener formato de archivo desde BD (si existe)
+        extension = path.suffix.lower().lstrip(".")
+        id_formato = None
+        try:
+            formato = await self.repositorio.obtener_formato_archivo_por_codigo(extension)
+            if formato:
+                id_formato = formato.id_formato_archivo
+        except Exception as exc:
+            # La tabla rag.formatos_archivo puede no existir aún (migración
+            # 009a pendiente).  En ese caso, la transacción de la sesión
+            # queda abortada: debemos hacer rollback explícito para
+            # que la ingesta principal pueda continuar con una transacción
+            # limpia.
+            logger.info(
+                "Formato de archivo no disponible para '%s': %s. "
+                "Se omite y se limpia la transacción.",
+                extension, exc,
+            )
+            await self.repositorio.session.rollback()
 
         return await self.ingestar(
-            titulo=titulo, contenido=contenido,
+            titulo=titulo, contenido=resultado_extraccion.contenido,
             fuente=fuente, tipo_documento=tipo_documento,
-            metadatos=metadatos,
+            usuario_cargador=usuario_cargador,
+            identificador_usuario_cargador=identificador_usuario_cargador,
+            id_formato_archivo=id_formato,
+            nombre_archivo_original=path.name,
+            extension_archivo=extension,
+            mime_type=None,  # Se puede obtener de mimetypes si es necesario
+            cantidad_paginas=resultado_extraccion.cantidad_paginas,
+            tamano_bytes=resultado_extraccion.tamano_bytes,
+            hash_sha256=resultado_extraccion.hash_sha256,
         )

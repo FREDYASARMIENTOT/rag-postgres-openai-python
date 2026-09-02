@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock
 
 from fastapi_app.mcp_servidor import (
     crear_mcp_servidor, _validar_tipo_documento, _validar_limite,
+    _validar_usuario,
     TIPO_DOCUMENTO_PERMITIDOS, LIMITE_MAXIMO_RESULTADOS,
 )
 from fastapi_app.repositorio_documentos import RepositorioDocumentos
@@ -109,3 +110,29 @@ class TestValidacionLimite:
     def test_limite_invalido(self):
         assert _validar_limite("xyz") == 10
         assert _validar_limite(None) == 10
+
+
+class TestValidacionUsuario:
+    """Tests para _validar_usuario."""
+
+    def test_usuario_valido_devuelve_stripped(self):
+        assert _validar_usuario("Juan Pérez") == "Juan Pérez"
+
+    def test_usuario_con_espacios_se_limpia(self):
+        assert _validar_usuario("  admin  ") == "admin"
+
+    def test_usuario_vacio_lanza_error(self):
+        with pytest.raises(ValueError, match="usuario"):
+            _validar_usuario("")
+
+    def test_usuario_solo_espacios_lanza_error(self):
+        with pytest.raises(ValueError):
+            _validar_usuario("   ")
+
+    def test_usuario_none_lanza_error(self):
+        with pytest.raises(ValueError):
+            _validar_usuario(None)  # type: ignore
+
+    def test_usuario_largo_se_trunca(self):
+        largo = _validar_usuario("a" * 300)
+        assert len(largo) == 200

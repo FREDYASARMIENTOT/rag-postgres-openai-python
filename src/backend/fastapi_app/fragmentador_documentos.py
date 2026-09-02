@@ -107,7 +107,7 @@ class FragmentadorDocumentos:
 
         secciones = self._dividir_por_encabezados(contenido_markdown)
         fragmentos: List[FragmentoResultado] = []
-        orden = 0
+        orden = 1
 
         for seccion in secciones:
             if not seccion.strip():
