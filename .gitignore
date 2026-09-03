@@ -141,9 +141,13 @@ cython_debug/
 npm-debug.log*
 node_modules
 static/
+poc-static/
 
 # Playwright test trace
 test-results/
+
+# PID files (local execution artifacts)
+*.pid
 
 # Test virtual environments
 test_venv*/

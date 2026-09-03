@@ -285,6 +285,13 @@ class RepositorioDocumentos:
             fragmentos.append((frag, float(fila.score)))
         return fragmentos
 
+    async def listar_documentos(self) -> List[Documento]:
+        """Obtiene todos los documentos, ordenados por ID descendente."""
+        resultado = await self.session.execute(
+            select(Documento).order_by(Documento.id_documento.desc())
+        )
+        return list(resultado.scalars().all())
+
     async def eliminar_documento(self, documento_id: int) -> bool:
         """Elimina un documento y sus fragmentos (cascade).
 
